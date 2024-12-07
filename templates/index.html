@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation Ammoniac Temps Réel</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet-src.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+        }
+        #sidebar {
+            width: 25%;
+            padding: 10px;
+            background: #f4f4f4;
+            overflow-y: auto;
+            border-right: 1px solid #ccc;
+        }
+        #map {
+            width: 75%;
+            height: 100vh;
+        }
+        .sensor {
+            margin-bottom: 10px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .sensor h3 {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Capteurs</h2>
+        <div id="sensor-list"></div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        const socket = io();
+
+        // Initialiser la carte
+        const map = L.map('map').setView([33.856, -5.572], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Variables pour stocker les cercles des capteurs
+        let sensorCircles = [];
+
+        // Ajouter des marqueurs pour chaque capteur
+        const sensorCoordinates = [
+            [33.85563147149165, -5.572377739710788],
+            [33.85713810485788, -5.571694444520745],
+            [33.857751186152115, -5.5707205525246195]
+        ];
+
+        // Ajouter des marqueurs pour chaque capteur
+        sensorCoordinates.forEach((coord, index) => {
+            L.marker([coord[0], coord[1]])
+                .addTo(map)
+                .bindPopup(`Capteur ${index + 1}`)
+                .openPopup();
+        });
+
+        // Fonction pour calculer la couleur en fonction de la concentration
+        function getColor(concentration) {
+            if (concentration < 25) return 'green';
+            if (concentration < 50) return 'yellow';
+            if (concentration < 75) return 'orange';
+            return 'red';
+        }
+
+        // Écouter les données en temps réel
+        socket.on('update_data', (data) => {
+            const sensorCirclesData = data.sensor_circles;
+
+            // Retirer les cercles précédents
+            sensorCircles.forEach(circle => {
+                map.removeLayer(circle);
+            });
+
+            sensorCircles = [];
+
+            // Créer et afficher de nouveaux cercles
+            sensorCirclesData.forEach(sensor => {
+                const radius = sensor.radius;  // Rayon dynamique en fonction de la concentration
+                const color = getColor(sensor.concentration);  // Couleur en fonction de la concentration
+
+                const circle = L.circle([sensor.lat, sensor.lon], {
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.4,
+                    radius: radius * 1000  // Convertir en mètres pour le rayon
+                }).addTo(map);
+
+                // Ajouter le cercle à la liste des cercles
+                sensorCircles.push(circle);
+            });
+
+            // Mettre à jour les informations des capteurs
+            const sensorList = document.getElementById('sensor-list');
+            sensorList.innerHTML = '';
+            sensorCirclesData.forEach(sensor => {
+                const sensorDiv = document.createElement('div');
+                sensorDiv.className = 'sensor';
+                sensorDiv.innerHTML = `
+                    <h3>Capteur ${sensor.id}</h3>
+                    <p>Concentration d'ammoniac: ${sensor.concentration.toFixed(2)}</p>
+                    <p>Rayon de propagation: ${(sensor.radius * 1000).toFixed(2)} mètres</p>
+                `;
+                sensorList.appendChild(sensorDiv);
+            });
+        });
+    </script>
+</body>
+</html>
